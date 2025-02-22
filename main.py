@@ -13,25 +13,6 @@ import streamlit as st
 import warnings
 warnings.filterwarnings("ignore")
 
-def get_base64(bin_file):
-    with open(bin_file, 'rb') as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
-
-def set_background(png_file):
-    bin_str = get_base64(png_file)
-    page_bg_img = '''
-    <style>
-    .stApp {
-    background-image: url("data:image/png;base64,%s");
-    background-size: cover;
-    }
-    </style>
-    ''' % bin_str
-    st.markdown(page_bg_img, unsafe_allow_html=True)
-
-
-
 #Get Historical Stock Closing Price for Last 1 Year
 def get_stock_price(ticker):
     if "." in ticker:
@@ -91,20 +72,6 @@ def get_financial_statements(ticker):
     return balance_sheet
 
 def main():
-
-    set_background('bcg_light.png')
-    st.header('Stock Recommendation System')
-    #importing api key as environment variable
-
-    st.sidebar.write('This tool provides recommendation based on the RAG & ReAct Based Schemes:')
-    lst = ['Get Ticker Value',  'Fetch Historic Data on Stock','Get Financial Statements','Scrape the Web for Stock News','LLM ReAct based Verbal Analysis','Output Recommendation: Buy, Sell, or Hold with Justification']
-
-    s = ''
-
-    for i in lst:
-        s += "- " + i + "\n"
-
-    st.sidebar.markdown(s)
 
     llm = Ollama(model="llama3:3b-instruct", temperature=0)
 
@@ -180,12 +147,12 @@ def main():
 
     zero_shot_agent.agent.llm_chain.prompt.template=stock_prompt
 
-    if prompt := st.chat_input():
-        st.chat_message("user").write(prompt)
-        with st.chat_message("assistant"):
-            st_callback = StreamlitCallbackHandler(st.container())
-            response = zero_shot_agent(f'Is {prompt} a good investment choice right now?', callbacks=[st_callback])
-            st.write(response["output"])
+    prompt = input("Give name of ticker: ")
+
+    response = zero_shot_agent(f'Is {prompt} a good investment choice right now?')
+
+    print(response["output"])
+
 
 if __name__ == "__main__":
 
