@@ -1,17 +1,16 @@
-import os
-import time
-from bs4 import BeautifulSoup
-import re
 import yfinance as yf
-import requests
-import base64
+from serpapi import GoogleSearch
 from langchain.agents import Tool, initialize_agent
-from langchain_community.llms import Ollama
 from langchain_community.tools import DuckDuckGoSearchRun
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.callbacks import StreamlitCallbackHandler
+from dotenv import load_dotenv
 import streamlit as st
 import warnings
+import os
 warnings.filterwarnings("ignore")
+
+api_key = "AIzaSyD9ps1SZXQ6qPm96BrXx07YGCaEBUT74Jw"
 
 #Get Historical Stock Closing Price for Last 1 Year
 def get_stock_price(ticker):
@@ -24,38 +23,25 @@ def get_stock_price(ticker):
     df.index.rename("Date",inplace=True)
     return df.to_string()
 
-#Get News From Web Scraping
-def google_query(search_term):
-    if "news" not in search_term:
-        search_term = search_term+" stock news"
-    url = f"https://www.google.com/search?q={search_term}"
-    url = re.sub(r"\s","+",url)
-    return url
+def google_news(query):
+    query += " Stock News"
+    params = {
+        "engine": "google_news",
+        "q": query,
+        "api_key": "a3e81c4153222647d8ceb7c287f0f60b99f3e3122aab3eb902748dabf1f6daa9",  # replace with your SerpAPI key
+        "hl": "en",      # language
+        "gl": "us"       # country (geolocation)
+    }
 
-#Get Recent Stock News
-def get_recent_stock_news(company_name):
-    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36'}
-    g_query = google_query(company_name)
-    res=requests.get(g_query,headers=headers).text
-    soup = BeautifulSoup(res,"html.parser")
-    news=[]
-    for n in soup.find_all("div","n0jPhd ynAwRc tNxQIb nDgy9d"):
+    search = GoogleSearch(params)
+    results = search.get_dict()
+    output = "Recent News:\n"
+    for i, news in enumerate(results.get("news_results", [])[:5]):
+        title = news.get("title")
+        date = news.get("date")
+        output += f"News {i+1}:\nTitle of the news article:{title}\nDate of the news article:{date}"
 
-        news.append(n.text)
-    for n in soup.find_all("div","IJl0Z"):
-        news.append(n.text)
-
-    if len(news) > 6:
-        news = news[:4]
-    else:
-        news = news
-    
-    news_string=""
-    for i,n in enumerate(news):
-        news_string+=f"{i}. {n}\n"
-    top5_news="Recent News:\n\n"+news_string
-    
-    return top5_news
+    return output
 
 #Get Financial Statements
 def get_financial_statements(ticker):
@@ -64,7 +50,7 @@ def get_financial_statements(ticker):
     else:
         ticker=ticker
     company = yf.Ticker(ticker)
-    balance_sheet = company.balance_sheet
+    balance_sheet = company.balancesheet
     if balance_sheet.shape[1]>3:
         balance_sheet = balance_sheet.iloc[:,:3]
     balance_sheet = balance_sheet.dropna(how="any")
@@ -73,7 +59,12 @@ def get_financial_statements(ticker):
 
 def main():
 
-    llm = Ollama(model="llama3:3b-instruct", temperature=0)
+    model = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        temperature=0.2,
+        max_output_tokens=2048,
+        google_api_key=api_key 
+    )
 
     #Initialize DuckDuckGo Search Engine
     search=DuckDuckGoSearchRun()     
@@ -81,7 +72,7 @@ def main():
     Tool(
         name="Stock Ticker Search",
         func=search.run,
-        description="Use only when you need to get stock ticker from internet, you can also get recent stock related news. Dont use it for any other analysis or task"
+        description="Use only when you need to get stock ticker from internet."
 
     ),
     Tool(
@@ -92,8 +83,8 @@ def main():
     ),
     Tool(
         name="Get Recent News",
-        func= get_recent_stock_news,
-        description="Use this to fetch recent news about stocks"
+        func= google_news,
+        description="Use this to fetch recent news about a specific stock such as 'Apple' or 'Tesla'"
     ),
     Tool(
         name="Get Financial Statements",
@@ -103,7 +94,7 @@ def main():
     ]
 
     zero_shot_agent=initialize_agent(
-        llm=llm,
+        llm=model,
         agent="zero-shot-react-description",
         tools=tools,
         verbose=True,
@@ -120,7 +111,7 @@ def main():
     Get Stock Historical Price: Use when you are asked to evaluate or analyze a stock. This will output historic share price data. You should input the stock ticker to it 
     Stock Ticker Search: Use only when you need to get stock ticker from internet, you can also get recent stock related news. Dont use it for any other analysis or task
     Get Recent News: Use this to fetch recent news about stocks
-    Get Financial Statements: Use this to get financial statement of the company. With the help of this data company's historic performance can be evaluaated. You should input stock ticker to it
+    Get Financial Statements: Use this to get financial statement of the company. With the help of this data company's historic performance can be evaluated. You should input stock ticker to it
 
     steps- 
     Note- if you fail in satisfying any of the step below, Just move to next one
@@ -147,11 +138,13 @@ def main():
 
     zero_shot_agent.agent.llm_chain.prompt.template=stock_prompt
 
-    prompt = input("Give name of ticker: ")
+    while True:
 
-    response = zero_shot_agent(f'Is {prompt} a good investment choice right now?')
+        prompt = input("Ask the AI financial advisor: ")
 
-    print(response["output"])
+        response = zero_shot_agent(prompt)
+
+        print(response["output"])
 
 
 if __name__ == "__main__":
