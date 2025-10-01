@@ -9,8 +9,10 @@ import streamlit as st
 import warnings
 import os
 warnings.filterwarnings("ignore")
+load_dotenv(".env.local")
 
-api_key = "AIzaSyD9ps1SZXQ6qPm96BrXx07YGCaEBUT74Jw"
+google_api_key = os.getenv("GOOGLE_API_KEY")
+serpapi_key = os.getenv("SERPAPI_KEY")
 
 #Get Historical Stock Closing Price for Last 1 Year
 def get_stock_price(ticker):
@@ -28,7 +30,7 @@ def google_news(query):
     params = {
         "engine": "google_news",
         "q": query,
-        "api_key": "a3e81c4153222647d8ceb7c287f0f60b99f3e3122aab3eb902748dabf1f6daa9",  # replace with your SerpAPI key
+        "api_key": serpapi_key,  # replace with your SerpAPI key
         "hl": "en",      # language
         "gl": "us"       # country (geolocation)
     }
@@ -63,7 +65,7 @@ def main():
         model="gemini-2.5-flash",
         temperature=0.2,
         max_output_tokens=2048,
-        google_api_key=api_key 
+        google_api_key=google_api_key 
     )
 
     #Initialize DuckDuckGo Search Engine
