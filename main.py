@@ -1,6 +1,7 @@
 import yfinance as yf
 from serpapi import GoogleSearch
-from langchain.agents import Tool, initialize_agent
+from langchain import hub
+from langchain.agents import Tool, initialize_agent, AgentExecutor, create_react_agent
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.callbacks import StreamlitCallbackHandler
@@ -41,7 +42,7 @@ def google_news(query):
     for i, news in enumerate(results.get("news_results", [])[:5]):
         title = news.get("title")
         date = news.get("date")
-        output += f"News {i+1}:\nTitle of the news article:{title}\nDate of the news article:{date}"
+        output += f"News {i+1}:\nTitle of the news article:{title}\nDate of the news article:{date}\n"
 
     return output
 
@@ -95,57 +96,62 @@ def main():
     )
     ]
 
-    zero_shot_agent=initialize_agent(
-        llm=model,
-        agent="zero-shot-react-description",
-        tools=tools,
-        verbose=True,
-        max_iteration=4,
-        return_intermediate_steps=False,
-        handle_parsing_errors=True
-    )
+    # 1. Pull a standard, tested ReAct prompt template from the LangChain Hub
+    # This prompt is known to work well with ReAct agents.
+    prompt_template = hub.pull("hwchase17/react")
 
-    #Adding predefine evaluation steps in the agent Prompt
-    stock_prompt="""You are a financial advisor. Give stock recommendations for given query.
-    Everytime first you should identify the company name and get the stock ticker symbol for the stock.
-    Answer the following questions as best you can. You have access to the following tools:
+    # 2. Define your high-level instructions within the prompt's variables
+    prompt_template.template = """You are an expert financial advisor. Your goal is to provide a 'Buy', 'Hold', or 'Sell' recommendation for a given company's stock.
 
-    Get Stock Historical Price: Use when you are asked to evaluate or analyze a stock. This will output historic share price data. You should input the stock ticker to it 
-    Stock Ticker Search: Use only when you need to get stock ticker from internet, you can also get recent stock related news. Dont use it for any other analysis or task
-    Get Recent News: Use this to fetch recent news about stocks
-    Get Financial Statements: Use this to get financial statement of the company. With the help of this data company's historic performance can be evaluated. You should input stock ticker to it
+    To do this, you will perform a structured analysis by using the available tools to gather all necessary information before answering.
+    1.  First, identify the company and find its official stock ticker symbol.
+    2.  Then, gather essential data: historical stock prices, recent financial statements, and the latest news.
+    3.  Synthesize all the collected information.
+    4.  Finally, provide a conclusive recommendation justified by the data.
 
-    steps- 
-    Note- if you fail in satisfying any of the step below, Just move to next one
-    1) Get the company name and search for the "company name + stock ticker" on internet using the "Stock Ticker Search". Dont hallucinate extract stock ticker as it is from the text. Output- stock ticker. If stock ticker is not found, stop the process and output this text: This stock does not exist
-    2) Use "Get Stock Historical Price" tool to gather stock info. Output- Stock data
-    3) Get company's historic financial data using "Get Financial Statements". Output- Financial statement
-    4) Use the "Get Recent News" tool to search for latest stock related news. Output- Stock news
-    5) Analyze the stock based on gathered data and give detailed analysis for investment choice. provide numbers and reasons to justify your answer. Output- Give a single answer if the user should buy,hold or sell. You should Start the answer with Either Buy, Hold, or Sell in Bold after that Justify.
+    You have access to the following tools:
+    {tools}
 
     Use the following format:
-
     Question: the input question you must answer
-    Thought: you should always think about what to do, Also try to follow steps mentioned above
-    Action: the action to take, should be one of [Get Stock Historical Price, Stock Ticker Search, Get Recent News, Get Financial Statements]
+    Thought: you should always think about what to do
+    Action: the action to take, should be one of [{tool_names}]
     Action Input: the input to the action
     Observation: the result of the action
-    ... (this Thought/Action/Action Input/Observation can repeat N times, if Thought is empty go to the next Thought and skip Action/Action Input and Observation)
-    Thought: I now know the final answer
-    Final Answer: the final answer to the original input question
+    ... (this Thought/Action/Action Input/Observation can repeat N times)
+    Thought: I have gathered all necessary data and am ready to provide the final analysis.
+    Final Answer: Start your response with **Buy**, **Hold**, or **Sell**. Then, provide a concise but detailed justification.
+
     Begin!
 
     Question: {input}
     Thought:{agent_scratchpad}"""
 
-    zero_shot_agent.agent.llm_chain.prompt.template=stock_prompt
 
+    # 3. Create the agent
+    react_agent = create_react_agent(
+        llm=model,
+        tools=tools,
+        prompt=prompt_template
+    )
+
+    # 4. Create the Agent Executor to run the agent
+    # This replaces `initialize_agent`
+    zero_shot_agent = AgentExecutor(
+        agent=react_agent,
+        tools=tools,
+        verbose=True,
+        handle_parsing_errors=True,
+        max_iterations=6
+    )
+
+    # Your while loop for input remains the same, but the call changes slightly
     while True:
-
-        prompt = input("Ask the AI financial advisor: ")
-
-        response = zero_shot_agent(prompt)
-
+        prompt_input = input("Ask the AI financial advisor: ")
+        if prompt_input.lower() in ['exit', 'quit']:
+            break
+        # The input must now be a dictionary
+        response = zero_shot_agent.invoke({"input": prompt_input})
         print(response["output"])
 
 
