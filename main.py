@@ -30,7 +30,7 @@ def google_news(query):
     params = {
         "engine": "google_news",
         "q": query,
-        "api_key": serpapi_key,  # replace with your SerpAPI key
+        "api_key": serpapi_key,
         "hl": "en",      # language
         "gl": "us"       # country (geolocation)
     }
@@ -117,10 +117,10 @@ def main():
 
     steps- 
     Note- if you fail in satisfying any of the step below, Just move to next one
-    1) Get the company name and search for the "company name + stock ticker" on internet. Dont hallucinate extract stock ticker as it is from the text. Output- stock ticker. If stock ticker is not found, stop the process and output this text: This stock does not exist
+    1) Get the company name and search for the "company name + stock ticker" on internet using the "Stock Ticker Search". Dont hallucinate extract stock ticker as it is from the text. Output- stock ticker. If stock ticker is not found, stop the process and output this text: This stock does not exist
     2) Use "Get Stock Historical Price" tool to gather stock info. Output- Stock data
     3) Get company's historic financial data using "Get Financial Statements". Output- Financial statement
-    4) Use this "Get Recent News" tool to search for latest stock related news. Output- Stock news
+    4) Use the "Get Recent News" tool to search for latest stock related news. Output- Stock news
     5) Analyze the stock based on gathered data and give detailed analysis for investment choice. provide numbers and reasons to justify your answer. Output- Give a single answer if the user should buy,hold or sell. You should Start the answer with Either Buy, Hold, or Sell in Bold after that Justify.
 
     Use the following format:
